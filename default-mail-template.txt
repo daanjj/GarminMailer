@@ -1,0 +1,14 @@
+Hi {name}!
+
+Als bijlage bij deze mail tref je het FIT-bestand {filename} dat tijdens de ThermoClinic is gemaakt.
+
+Je kan deze FIT-file bekijken met de FIT File Viewer: https://daanjj.github.io/fit-file-viewer
+
+Dank voor je deelname en... help verder mee hittebewustwording in Nederland te vergroten!
+
+
+Met vriendelijke groet,
+
+Het ThermoClinics-team
+www.thermoclinics.nl
+mailto:infothermoclinics@gmail.com
