@@ -1,45 +1,38 @@
-# This is the name of your workflow
 name: Build Windows Executable
 
-# This 'on:' section means it will run
 on:
-  # 1. Every time you push code to the 'main' branch
   push:
     branches: [ "main" ]
-  # 2. (And more importantly) Adds a "Run workflow" button
-  #    so you can build it manually whenever you want.
   workflow_dispatch:
 
-# This 'jobs:' section defines what to do
 jobs:
   build:
-    # This is the key: It runs the job on a cloud-based Windows (x86/x64) machine!
     runs-on: windows-latest
 
     steps:
-      # Step 1: Checks out your repository code so the VM can access it
+      # Step 1: Checks out your repository code (uses latest v4)
       - uses: actions/checkout@v4
 
-      # Step 2: Sets up the correct version of Python
+      # Step 2: Sets up Python (uses latest v5)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12' # <-- Change this if you used a different version
 
-      # Step 3: Installs all your libraries from requirements.txt
+      # Step 3: Installs all your libraries
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
 
-      # Step 4: Runs PyInstaller to create the .exe
+      # Step 4: Runs PyInstaller
       - name: Build executable
         run: pyinstaller --onefile --noconsole garmin_mail_gui.py # <-- ⚠️ EDIT THIS LINE
 
-      # Step 5: Uploads the finished .exe as a file you can download
+      # Step 5: Uploads the finished .exe (uses latest v4)
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-executable
           path: dist/ # This is the folder PyInstaller puts the .exe in
