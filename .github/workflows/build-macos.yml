@@ -32,4 +32,4 @@ jobs:
         with:
           name: macos-app-bundle
           # This tells it to find the .app "folder" PyInstaller made
-          path: dist/garmin_mail_gui.app # <-- ⚠️ EDIT THIS LINE
+          path: dist/GarminMailer.app # <-- ⚠️ EDIT THIS LINE

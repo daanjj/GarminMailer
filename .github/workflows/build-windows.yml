@@ -28,11 +28,11 @@ jobs:
 
       # Step 4: Runs PyInstaller
       - name: Build executable
-        run: pyinstaller --onefile --noconsole garmin_mail_gui.py # <-- ⚠️ EDIT THIS LINE
+        run: pyinstaller --onefile --noconsole --name="GarminMailer" garmin_mail_gui.py # <-- ⚠️ EDIT THIS LINE
 
       # Step 5: Uploads the finished .exe (uses latest v4)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-executable
+          name: GarminMailer # windows-executable
           path: dist/ # This is the folder PyInstaller puts the .exe in
