@@ -1,0 +1,12 @@
+# Build artifacts
+/build
+/dist
+
+# macOS specific
+.DS_Store
+
+# Python (if you're using it)
+__pycache__/
+*.pyc
+.venv/
+venv/

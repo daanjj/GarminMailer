@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build macOS App",
+      "type": "shell",
+      "command": "pyinstaller",
+      "args": [
+        "--windowed",
+        "--onefile",
+        "--name=GarminMailer",
+        "garmin_mail_gui.py" // <-- Change this to your main .py file
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
