@@ -415,7 +415,7 @@ def send_email_gmail(conf: dict, to_addr: str, attachments: List[Path], body_tex
         subject = f"Garmin FIT activities ({count} files) – {datetime.now():%Y-%m-%d}"
 
     msg = EmailMessage()
-    msg["From"] = conf["username"]
+    msg["From"] = conf.get("from_address", conf["username"])
     msg["To"] = to_addr
     msg["Subject"] = subject
     msg.set_content(body_text if body_text else "Attached is the latest Garmin FIT file(s).")

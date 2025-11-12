@@ -2,5 +2,6 @@
   "smtp_server": "smtp.gmail.com",
   "smtp_port": 465,
   "username": "your-email@gmail.com",
-  "password": "your-google-app-password"
+  "password": "your-google-app-password",
+  "from_address": "your-from-email-address"
 }
