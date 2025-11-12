@@ -1,7 +1,7 @@
 {
-  "smtp_server": "smtp.gmail.com",
-  "smtp_port": 465,
-  "username": "your-email@gmail.com",
-  "password": "your-google-app-password",
+  "smtp_server": "smtp-relay.brevo.com",
+  "smtp_port": 587,
+  "username": "your-email@smtp-brevo.com",
+  "password": "your-brevo-app-password",
   "from_address": "your-from-email-address"
 }

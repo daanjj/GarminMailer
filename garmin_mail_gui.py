@@ -639,7 +639,7 @@ class Worker(threading.Thread):
         try:
             send_email_gmail(conf, email, saved_paths, body_text)  # type: ignore[arg-type]
         except smtplib.SMTPAuthenticationError:
-            self.post("ERROR|AUTH: Gmail rejected login. Use an App Password in mailer.conf.json.")
+            self.post("ERROR|AUTH: Brevo rejected login. Check your username/password in mailer.conf.json.")
             return
         except ssl.SSLError as e:
             self.post(f"ERROR|SSL: {e}. Tip: install certifi.")
