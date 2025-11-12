@@ -1,6 +1,6 @@
 Hi {name}!
 
-Als bijlage bij deze mail tref je het FIT-bestand dat tijdens de ThermoClinic is gemaakt.
+Als bijlage bij deze mail tref je het FIT-bestand dat tijdens de ThermoClinic is gemaakt. NB: er kan meer dan één FIT-bestand zijn ttoegevoegd als een workout tijdelijk was gestopt.
 
 Je kan deze FIT-file bekijken met de FIT File Viewer: https://daanjj.github.io/fit-file-viewer
 
