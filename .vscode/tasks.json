@@ -7,7 +7,7 @@
       "command": "pyinstaller",
       "args": [
         "--windowed",
-        "--onefile",
+        "--onedir",
         "--name=GarminMailer",
         "garmin_mail_gui.py" // <-- Change this to your main .py file
       ],

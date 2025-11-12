@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Configuration with secrets
+mailer.conf.json
+venv/

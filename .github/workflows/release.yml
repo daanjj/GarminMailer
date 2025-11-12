@@ -1,0 +1,77 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger this workflow when a tag like v1.0, v1.2.3 is pushed
+
+jobs:
+  build-binaries:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build macOS .app Bundle
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --onedir --windowed --name="GarminMailer" garmin_mail_gui.py
+          zip -r GarminMailer-macOS.zip dist/GarminMailer.app
+
+      - name: Build Windows Executable
+        if: runner.os == 'Windows'
+        run: pyinstaller --onefile --noconsole --name="GarminMailer" garmin_mail_gui.py
+
+      - name: Upload macOS Artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GarminMailer-macOS
+          path: GarminMailer-macOS.zip
+
+      - name: Upload Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GarminMailer-Windows
+          path: dist/GarminMailer.exe
+
+  create-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create releases and upload assets
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          # This will create a release with the name of the tag
+          # e.g., pushing a tag 'v1.0.0' will create a release named 'v1.0.0'
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          # This will use the commit messages between this tag and the previous one as the release body
+          generate_release_notes: true
+          files: |
+            artifacts/GarminMailer-Windows/GarminMailer.exe
+            artifacts/GarminMailer-macOS/GarminMailer-macOS.zip
