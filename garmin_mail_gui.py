@@ -429,10 +429,24 @@ def send_email_gmail(conf: dict, to_addr: str, attachments: List[Path], body_tex
                 filename=file_path.name
                 )
 
+    smtp_server = conf["smtp_server"]
+    smtp_port = int(conf["smtp_port"])
+    username = conf["username"]
+    password = conf["password"]
+
     ctx = ssl.create_default_context(cafile=CERT_BUNDLE) if CERT_BUNDLE else ssl.create_default_context()
-    with smtplib.SMTP_SSL(conf["smtp_server"], int(conf["smtp_port"]), context=ctx) as smtp:
-        smtp.login(conf["username"], conf["password"])
-        smtp.send_message(msg)
+
+    if smtp_port == 587:
+        with smtplib.SMTP(smtp_server, smtp_port) as smtp:
+            smtp.starttls(context=ctx)
+            smtp.login(username, password)
+            smtp.send_message(msg)
+    elif smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=ctx) as smtp:
+            smtp.login(username, password)
+            smtp.send_message(msg)
+    else:
+        raise ValueError(f"Unsupported SMTP port: {smtp_port}. Only 465 (SSL) and 587 (STARTTLS) are supported.")
 
 # ---------------------------------------------------------------------------
 # Background worker thread (no Tk calls inside; uses queues)
