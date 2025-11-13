@@ -39,8 +39,8 @@ jobs:
         run: |
           pip install pyinstaller-versionfile
           $version = "${{ github.ref_name }}" -replace "v", ""
-          create-version-file garmin_mail_gui.py --version $version --company "GarminMailer" --product-name "GarminMailer"
-          pyinstaller --onefile --noconsole --name="GarminMailer" --icon="icon/icon.ico" --version-file version.txt garmin_mail_gui.py
+          create-version-file garmin_mail_gui.py --version $version --company "GarminMailer" --product-name "GarminMailer" --outfile version.txt
+          pyinstaller --onefile --noconsole GarminMailer.spec
 
       - name: Upload macOS Artifact
         if: runner.os == 'macOS'
