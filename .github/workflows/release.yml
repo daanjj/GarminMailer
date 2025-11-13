@@ -30,6 +30,12 @@ jobs:
           pip install pyinstaller
           pip install -r requirements.txt
 
+      - name: Install Windows-specific dependencies
+        if: runner.os == 'Windows'
+        run: |
+          pip install pyinstaller-versionfile
+          pip install pywin32
+
       - name: Build macOS .app Bundle
         if: runner.os == 'macOS'
         run: |
@@ -40,10 +46,9 @@ jobs:
       - name: Build Windows Executable
         if: runner.os == 'Windows'
         run: |
-          pip install pyinstaller-versionfile
           $version = "${{ github.ref_name }}" -replace "v", ""
-          create-version-file garmin_mail_gui.py --version $version --company "GarminMailer" --product-name "GarminMailer" --outfile version.txt
-          $env:GARMIN_MAILER_VERSION_FILE = (Resolve-Path version.txt)
+          create-version-file garmin_mail_gui.py --version $version --company "GarminMailer" --product-name "GarminMailer" --outfile version_info.txt
+          $env:GARMIN_MAILER_VERSION_FILE = (Resolve-Path version_info.txt).Path
           pyinstaller --onefile --noconsole GarminMailer.spec
 
       - name: Upload macOS Artifact

@@ -80,7 +80,7 @@ def get_windows_exe_version():
         ms = info['FileVersionMS']
         ls = info['FileVersionLS']
         return f"v{win32api.HIWORD(ms)}.{win32api.LOWORD(ms)}.{win32api.HIWORD(ls)}"
-    except Exception:
+    except (ImportError, Exception):
         return None
 
 
@@ -120,7 +120,13 @@ def get_app_version() -> str:
 
         # Sort tags using a key that handles version numbers correctly
         # (e.g., v1.10.0 > v1.2.0)
-        return max(v_tags, key=lambda v: [int(p) for p in v[1:].split('.')])
+        def version_key(v):
+            try:
+                return [int(p) for p in v[1:].split('.')]
+            except ValueError:
+                # Fallback for malformed version strings
+                return [0, 0, 0]
+        return max(v_tags, key=version_key)
     except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
         # Fallback on any error (git not found, not a repo, parsing error)
         return default_version

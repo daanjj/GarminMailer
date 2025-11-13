@@ -10,11 +10,22 @@ if version_file_env:
     if vf.exists():
         version_kwargs["version"] = str(vf)
 
+import sys
+
+# Add version.txt to data files if it exists (for macOS builds)
+datas = []
+if os.path.exists('version.txt'):
+    datas.append(('version.txt', '.'))
+
+# Add default template file
+if os.path.exists('default-mail-template.txt'):
+    datas.append(('default-mail-template.txt', '.'))
+
 a = Analysis(
     ['garmin_mail_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
