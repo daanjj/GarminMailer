@@ -6,7 +6,7 @@
       "command": "/bin/zsh",
       "args": [
         "-c",
-        "set -x; printf \"try\\n  tell application \\\"GarminMailer\\\" to quit\\nend try\" | osascript && sleep 2 && pyinstaller --onedir --windowed --noconfirm --name=\"GarminMailer\" --icon=\"icon/icon.icns\" garmin_mail_gui.py && open dist/GarminMailer.app"
+        "set -x; printf \"try\\n  tell application \\\"GarminMailer\\\" to quit\\nend try\" | osascript && sleep 2 && pyinstaller --noconfirm GarminMailer.spec && open dist/GarminMailer.app"
       ],
       "type": "shell",
       "problemMatcher": [],
