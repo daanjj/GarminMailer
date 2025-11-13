@@ -1,5 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+version_file = Path(__file__).with_name("version.txt")
+version_info = str(version_file) if version_file.exists() else None
 
 a = Analysis(
     ['garmin_mail_gui.py'],
@@ -32,7 +36,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version.txt',
+    version=version_info,
 )
 coll = COLLECT(
     exe,
