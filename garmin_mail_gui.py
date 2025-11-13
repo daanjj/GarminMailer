@@ -65,13 +65,44 @@ except Exception:
 IS_WINDOWS = sys.platform.startswith("win")
 IS_MAC = (sys.platform == "darwin")
 
+# ---------------------------------------------------------------------------
+# PyInstaller resource helper
+# ---------------------------------------------------------------------------
+def _resource_path(rel: str) -> Path:
+    base = getattr(sys, "_MEIPASS", None)
+    return (Path(base) / rel) if base else (Path(__file__).resolve().parent / rel)
+
+def get_windows_exe_version():
+    """Reads version from compiled EXE's resources on Windows."""
+    try:
+        import win32api
+        info = win32api.GetFileVersionInfo(sys.executable, '\\')
+        ms = info['FileVersionMS']
+        ls = info['FileVersionLS']
+        return f"v{win32api.HIWORD(ms)}.{win32api.LOWORD(ms)}.{win32api.HIWORD(ls)}"
+    except Exception:
+        return None
+
+
 def get_app_version() -> str:
     """
     Determines the app version by finding the highest git tag starting with 'v'.
     Falls back to a default if git is not available or no tags are found.
     """
-    default_version = "v9.1"
+    default_version = "v9.2"
     try:
+        # On Windows, when frozen, try to get version from EXE resources first
+        if IS_WINDOWS and getattr(sys, "_MEIPASS", None):
+            exe_version = get_windows_exe_version()
+            if exe_version:
+                return exe_version
+            # On macOS, when frozen, try to get version from bundled version.txt
+        if IS_MAC and getattr(sys, "_MEIPASS", None):
+            version_file = _resource_path("version.txt")
+            if version_file.exists():
+                exe_version = version_file.read_text(encoding="utf-8").strip()
+                if exe_version:
+                    return exe_version
         # Run git command to list all tags
         script_dir = Path(__file__).resolve().parent
         result = subprocess.run(
@@ -370,12 +401,12 @@ def list_fit_files(root: Path) -> List[Path]:
 # ---------------------------------------------------------------------------
 class FileChoiceDialog(tk.Toplevel):
     @staticmethod
-    def choose(parent: tk.Tk, files: List[Path], archive_only_mode: bool) -> Optional[List[Path]]:
-        dlg = FileChoiceDialog(parent, files, archive_only_mode)
+    def choose(parent: tk.Tk, files: List[Path], archive_only_mode: bool, preselect_single: bool = False) -> Optional[List[Path]]:
+        dlg = FileChoiceDialog(parent, files, archive_only_mode, preselect_single)
         parent.wait_window(dlg)
         return dlg.selected
 
-    def __init__(self, parent: tk.Tk, files: List[Path], archive_only_mode: bool):
+    def __init__(self, parent: tk.Tk, files: List[Path], archive_only_mode: bool, preselect_single: bool = False):
         super().__init__(parent)
         if archive_only_mode:
             self.title("Choose recent activities to archive")
@@ -436,6 +467,10 @@ class FileChoiceDialog(tk.Toplevel):
                 iid = tree.insert("", "end", values=(date_str, time_str, size))
             else:
                 iid = tree.insert("", "end", values=(time_str, size))
+
+            # Pre-select the item if preselect_single is True
+            if preselect_single:
+                tree.selection_set(iid)
             self._iid_to_path[iid] = f
 
         tree.pack(fill="both", expand=True)
@@ -546,6 +581,7 @@ class Worker(threading.Thread):
         self.pick_reply_queue: "queue.Queue[List[str] | None]" = queue.Queue()
         self.unmount_after_copy = unmount_after_copy
         self.archive_only = archive_only
+        self.saved_paths: List[Path] = []
 
     def post(self, msg: str) -> None:
         self.ui_queue.put(msg)
@@ -629,25 +665,27 @@ class Worker(threading.Thread):
                 self.post("ERROR|No file selected.")
                 return
         else:
-            # Email mode: only consider files with today's modification date.
+            # Email mode: only consider files with today's modification date
             today_date = date.today()
             todays_files = [f for f in files if datetime.fromtimestamp(f.stat().st_mtime).date() == today_date]
 
             if not todays_files:
                 self.post("ERROR|No activity files from today were found on the watch.")
                 return
-            elif len(todays_files) == 1:
-                selected_paths = [str(todays_files[0])]
+
+            # Always show the file picker, pre-selecting the single file if it exists
+            if len(todays_files) == 1:
+                preselect_single = True
             else:
-                self.post("ASK_PICK|" + json.dumps([str(p) for p in todays_files]))
-                selected_paths = self._receive_pick_selection()
-                if not selected_paths:
-                    self.post("ERROR|No file was selected to email.")
-                    return
+                preselect_single = False
+            self.post("ASK_PICK|" + json.dumps([str(p) for p in todays_files]) + f"|PRESELECT:{preselect_single}")
+            selected_paths = self._receive_pick_selection()
+            if not selected_paths:
+                self.post("ERROR|No file was selected to email.")
+                return
 
         selected = [Path(s) for s in selected_paths]
 
-        saved_paths: List[Path] = []
         for src in selected:
             # Determine the correct date string and save directory for each file.
             # In email mode, this is always today's date.
@@ -694,7 +732,7 @@ class Worker(threading.Thread):
             except Exception as e:
                 self.post(f"ERROR|Copy failed: {e}")
                 return
-            saved_paths.append(dest)
+            self.saved_paths.append(dest)
 
         # Eject after copy
         eject_result = None
@@ -712,7 +750,7 @@ class Worker(threading.Thread):
             prof = {
                     "device_id": device_id,
                     "model": model,
-                    "last_archived_files": [p.name for p in saved_paths],
+                    "last_archived_files": [p.name for p in self.saved_paths],
                     "last_action": "archive_only",
                     "last_time": datetime.now().isoformat(timespec="seconds"),
                     }
@@ -722,7 +760,7 @@ class Worker(threading.Thread):
                 pass
 
             elapsed = int(time.time() - self.start_ts)
-            for src, dest in zip(selected, saved_paths):
+            for src, dest in zip(selected, self.saved_paths):
                 log_line(
                         f"ARCHIVED  label={(label or '')}  file={dest}  src={src.name}  "
                         f"device_id={(device_id or '')}  model={model}  duration={elapsed}s  mode=ARCHIVE_ONLY"
@@ -739,9 +777,9 @@ class Worker(threading.Thread):
         if self._check_cancel():
             return
         body_text = read_mail_body_with_name(name)
-        self.post(f"STEP|Sending email... ({len(saved_paths)} attachment(s))|90")
+        self.post(f"STEP|Sending email... ({len(self.saved_paths)} attachment(s))|90")
         try:
-            send_email_gmail(conf, email, saved_paths, body_text)  # type: ignore[arg-type]
+            send_email_gmail(conf, email, self.saved_paths, body_text)  # type: ignore[arg-type]
         except smtplib.SMTPAuthenticationError:
             self.post("ERROR|AUTH: Brevo rejected login. Check your username/password in mailer.conf.json.")
             return
@@ -756,7 +794,7 @@ class Worker(threading.Thread):
         prof = {
                 "device_id": device_id,
                 "model": model,
-                "last_sent_files": [p.name for p in saved_paths],
+                "last_sent_files": [p.name for p in self.saved_paths],
                 "last_sent_time": datetime.now().isoformat(timespec="seconds"),
                 }
         try:
@@ -765,7 +803,7 @@ class Worker(threading.Thread):
             pass
 
         elapsed = int(time.time() - self.start_ts)
-        for src, dest in zip(selected, saved_paths):
+        for src, dest in zip(selected, self.saved_paths):
             log_line(
                     f"SENT  label={(label or '')}  name={name}  email={email}  file={dest}  "
                     f"src={src.name}  device_id={(device_id or '')}  model={model}  duration={elapsed}s  mode=EMAIL"
@@ -850,9 +888,9 @@ class App(tk.Tk):
         email_row.grid(row=1, column=1, sticky="ew", padx=(8, 0))
         email_row.columnconfigure(0, weight=1)
         self.email_var = tk.StringVar()
-        self.email_entry = ttk.Entry(email_row, textvariable=self.email_var, width=48)
+        self.email_entry = ttk.Entry(email_row, textvariable=self.email_var, width=48) # type: ignore
         self.email_entry.grid(row=0, column=0, sticky="ew")
-        self.submit_btn = ttk.Button(email_row, text="Submit", command=self._submit, state="disabled")
+        self.submit_btn = ttk.Button(email_row, text="Ready", command=self._submit, state="disabled")
         self.submit_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         # Checkboxes
@@ -987,7 +1025,7 @@ class App(tk.Tk):
             Garmin Mailer copies FIT activities from a connected Garmin watch and either emails them to the email address specified or archives them for later reference.
 
             Email vs archive-only:
-              - Email (default): enter Name and Recipient email, then click Submit. The app emails the selected .FIT files and saves today's activities into {SENT_ROOT}/YYYYMMDD.
+              - Email (default): enter Name and Recipient email, then click Ready. The app emails the selected .FIT files and saves today's activities into {SENT_ROOT}/YYYYMMDD.
               - Archive only: check "Archive only, do not send mail". Name/email are disabled and the app auto-starts when exactly one GARMIN volume is mounted. Files are renamed by activity date and stored under {ARCHIVE_ROOT}/YYYYMMDD with no email sent.
 
             Storage under {BASE}:
@@ -1182,23 +1220,30 @@ class App(tk.Tk):
 
                 elif kind == "ASK_PICK":
                     # ASK_PICK|[ "path1", "path2", ... ]
-                    raw = parts[1]
+                    sub_parts = parts[1].split("|PRESELECT:")
+                    raw_paths = sub_parts[0]
+                    preselect_single = False
+                    if len(sub_parts) > 1:
+                        preselect_single = sub_parts[1].lower() == 'true'
+
                     try:
-                        paths = [Path(s) for s in json.loads(raw)]
+                        paths = [Path(s) for s in json.loads(raw_paths)]
                     except Exception:
                         paths = []
+
                     # Pass copy_only status to the dialog
                     archive_only_mode = False
                     if self.worker:
                         archive_only_mode = self.worker.archive_only
-                    chosen = FileChoiceDialog.choose(self, paths, archive_only_mode) if paths else None
+
+                    chosen = FileChoiceDialog.choose(self, paths, archive_only_mode, preselect_single) if paths else None
+
                     if self.worker and hasattr(self.worker, "pick_reply_queue"):
                         if chosen:
                             self.worker.pick_reply_queue.put([str(p) for p in chosen])
                             self._set_status(f"Selected {len(chosen)} file(s).", None)
                         else:
                             self.worker.pick_reply_queue.put(None)
-                            self._set_status("No file selected.", None)
         except queue.Empty:
             pass
         finally:
@@ -1215,6 +1260,7 @@ class App(tk.Tk):
         self.running = False
         self.cancel_btn.configure(state="disabled")
         self.open_folder_btn.configure(state="normal")
+        self.submit_btn.configure(state="normal")
         try:
             self.bell()
         except Exception:
@@ -1222,6 +1268,7 @@ class App(tk.Tk):
 
         if mode == "EMAIL":
             if IS_MAC:
+                # Show a native macOS notification
                 try:
                     subprocess.run(
                             ["osascript", "-e", 'display notification "Email sent." with title "Garmin Mailer"'],
@@ -1229,19 +1276,13 @@ class App(tk.Tk):
                             )
                 except Exception:
                     pass
-            self.status_var.set("Email sent.")
-            self.pb["value"] = 100
 
-            # NEW in V9: clear BOTH name and email ~2s after success
-            def _clear_inputs():
-                self.name_var.set("")
-                self.email_var.set("")
-                self.status_var.set("Waiting for name and email")
-                self._validate_form()
-            self.after(2000, _clear_inputs)
-            self.submit_btn.configure(state="normal")
+            # Show a popup message
+            email = self.email_var.get()
+            attachment_count = len(self.worker.saved_paths) if self.worker is not None and hasattr(self.worker, "saved_paths") else 0
+            message = f"Email successfully sent to {email} with {attachment_count} attachment{'s' if attachment_count != 1 else ''}."
+            messagebox.showinfo("Garmin Mailer", message)
         else:
-            # ARCHIVE_ONLY: show prompt for next watch
             self.status_var.set(message)
             self.pb["value"] = 100
             self.open_folder_btn.configure(state="normal")
