@@ -5,10 +5,7 @@ a = Analysis(
     ['garmin_mail_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('default-mail-template.txt', '.'),
-        ('example.mailer.conf.json', '.'),
-    ],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

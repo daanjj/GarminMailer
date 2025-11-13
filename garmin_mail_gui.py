@@ -657,9 +657,9 @@ class Worker(threading.Thread):
                 # Email mode: use today's date for directory and filename
                 save_root = SENT_ROOT
                 if label:
-                    newname = f"{activity_date_str}_{label}_{name_sane}_{email_sane}_{src.name}"
+                    newname = f"{activity_date_str}_{label}_{email_sane}_{src.name}"
                 else:
-                    newname = f"{activity_date_str}_{name_sane}_{email_sane}_{src.name}"
+                    newname = f"{activity_date_str}_{email_sane}_{src.name}"
             else:
                 # Archive mode: determine activity date from file for directory and filename
                 save_root = ARCHIVE_ROOT

@@ -2,21 +2,20 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build macOS App",
-      "type": "shell",
-      "command": "pyinstaller",
+      "label": "Build and Restart GarminMailer",
+      "command": "/bin/zsh",
       "args": [
-        "--windowed",
-        "--onedir",
-        "--noconfirm",
-        "--name=GarminMailer",
-        "--icon=icon/icon.icns",
-        "garmin_mail_gui.py" // <-- Change this to your main .py file
+        "-c",
+        "set -x; printf \"try\\n  tell application \\\"GarminMailer\\\" to quit\\nend try\" | osascript && sleep 2 && pyinstaller --onedir --windowed --noconfirm --name=\"GarminMailer\" --icon=\"icon/icon.icns\" garmin_mail_gui.py && open dist/GarminMailer.app"
       ],
+      "type": "shell",
       "problemMatcher": [],
       "group": {
         "kind": "build",
         "isDefault": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
       }
     }
   ]
