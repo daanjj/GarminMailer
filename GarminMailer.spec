@@ -9,6 +9,11 @@ if version_file_env:
     vf = Path(version_file_env)
     if vf.exists():
         version_kwargs["version"] = str(vf)
+else:
+    # Fallback: look for version.txt in current directory
+    version_file = Path("version.txt")
+    if version_file.exists():
+        version_kwargs["version"] = str(version_file)
 
 import sys
 
