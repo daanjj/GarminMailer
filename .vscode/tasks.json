@@ -8,7 +8,9 @@
       "args": [
         "--windowed",
         "--onedir",
+        "--noconfirm",
         "--name=GarminMailer",
+        "--icon=icon/icon.icns",
         "garmin_mail_gui.py" // <-- Change this to your main .py file
       ],
       "problemMatcher": [],

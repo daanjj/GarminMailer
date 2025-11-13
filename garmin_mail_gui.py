@@ -50,6 +50,12 @@ from tkinter import ttk, messagebox
 
 # Optional TLS trust improvements on some Python installs
 try:
+    from fitparse import FitFile
+    FITPARSE_OK = True
+except ImportError:
+    FITPARSE_OK = False
+
+try:
     import certifi
     CERT_BUNDLE = certifi.where()
 except Exception:
@@ -58,24 +64,56 @@ except Exception:
 IS_WINDOWS = sys.platform.startswith("win")
 IS_MAC = (sys.platform == "darwin")
 
+def get_app_version() -> str:
+    """
+    Determines the app version by finding the highest git tag starting with 'v'.
+    Falls back to a default if git is not available or no tags are found.
+    """
+    default_version = "v9.1"
+    try:
+        # Run git command to list all tags
+        script_dir = Path(__file__).resolve().parent
+        result = subprocess.run(
+            ["git", "tag"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=script_dir
+        )
+        tags = result.stdout.strip().split('\n')
+        v_tags = [t for t in tags if t and t.startswith('v')]
+
+        if not v_tags:
+            return default_version
+
+        # Sort tags using a key that handles version numbers correctly
+        # (e.g., v1.10.0 > v1.2.0)
+        return max(v_tags, key=lambda v: [int(p) for p in v[1:].split('.')])
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        # Fallback on any error (git not found, not a repo, parsing error)
+        return default_version
+
 # ---------------------------------------------------------------------------
 # Paths and constants
 # ---------------------------------------------------------------------------
 DOCS = Path.home() / "Documents"
+APP_VERSION = get_app_version()
 BASE = DOCS / "GarminMailer"
 SENT_ROOT = BASE / "sent"
-LOGFILE  = BASE / "GarminMailSend.log"
+ARCHIVE_ROOT = BASE / "archive"
+LOGFILE  = BASE / "GarminMailer.log"
 CONF     = BASE / "mailer.conf.json"
 TEMPLATE = BASE / "mail-template.txt"
 DEVICES_DIR = BASE / "Devices"
 LABELS_CSV = BASE / "watch-labels.csv"       # device_id,label
+DEVMODE_FLAG = BASE / ".devmode"
 DETECT_TIMEOUT = 30                          # seconds to wait for mount
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 GARMIN_NS = {"g": "http://www.garmin.com/xmlschemas/GarminDevice/v2"}
 
 # Ensure base folders exist
-for p in [BASE, SENT_ROOT, DEVICES_DIR]:
+for p in [BASE, SENT_ROOT, ARCHIVE_ROOT, DEVICES_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -177,9 +215,9 @@ def load_labels_map() -> dict:
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
-def sanitize_localpart(email: str) -> str:
-    lp = email.split("@")[0]
-    return re.sub(r"[^A-Za-z0-9._-]", "", lp)
+def sanitize_email_for_filename(email: str) -> str:
+    email_at = email.replace("@", "-at-")
+    return re.sub(r"[^A-Za-z0-9._-]", "", email_at)
 
 def sanitize_name(name: str) -> str:
     no_spaces = re.sub(r"\s+", "", name.strip())
@@ -329,14 +367,20 @@ def list_fit_files(root: Path) -> List[Path]:
 # ---------------------------------------------------------------------------
 class FileChoiceDialog(tk.Toplevel):
     @staticmethod
-    def choose(parent: tk.Tk, files_today: List[Path]) -> Optional[List[Path]]:
-        dlg = FileChoiceDialog(parent, files_today)
+    def choose(parent: tk.Tk, files: List[Path], archive_only_mode: bool) -> Optional[List[Path]]:
+        dlg = FileChoiceDialog(parent, files, archive_only_mode)
         parent.wait_window(dlg)
         return dlg.selected
 
-    def __init__(self, parent: tk.Tk, files: List[Path]):
+    def __init__(self, parent: tk.Tk, files: List[Path], archive_only_mode: bool):
         super().__init__(parent)
-        self.title("Choose today's activities")
+        if archive_only_mode:
+            self.title("Choose recent activities to archive")
+            dialog_text = "Select one or more recent activities to archive (Cmd/Ctrl-click or Shift-click):"
+        else:
+            self.title("Choose today's activities")
+            dialog_text = "Multiple activities found for today. Select which file(s) to email (Cmd/Ctrl-click or Shift-click):"
+
         self.resizable(False, False)
         self.selected: Optional[List[Path]] = None
 
@@ -344,22 +388,31 @@ class FileChoiceDialog(tk.Toplevel):
         frm.pack(fill="both", expand=True)
 
         ttk.Label(
-                frm,
-                text="Multiple activities found for today. Select one or more (Cmd/Ctrl-click or Shift-click):"
-                ).pack(anchor="w", pady=(0, 8))
+                frm, text=dialog_text
+        ).pack(anchor="w", pady=(0, 8))
 
-        columns = ("time", "size")
+        if archive_only_mode:
+            columns = ("date", "time", "size")
+        else:
+            columns = ("time", "size")
+
         tree = ttk.Treeview(
                 frm,
                 columns=columns,
                 show="headings",
                 height=min(10, len(files)),
                 selectmode="extended"
-                )
-        tree.heading("time", text="Time (24-hour)")
-        tree.heading("size", text="Size")
-        tree.column("time", width=180, anchor="w")
-        tree.column("size", width=100, anchor="e")
+        )
+
+        col_width = 130
+        if archive_only_mode:
+            tree.heading("date", text="Date")
+            tree.column("date", width=col_width, anchor="center")
+
+        tree.heading("time", text="Time")
+        tree.heading("size", text="Size") # No change needed for size
+        tree.column("time", width=col_width, anchor="center")
+        tree.column("size", width=col_width, anchor="center")
 
         files_sorted = sorted(files, key=lambda p: p.stat().st_mtime)
         self._iid_to_path: dict[str, Path] = {}
@@ -372,9 +425,14 @@ class FileChoiceDialog(tk.Toplevel):
             return f"{n} B"
 
         for f in files_sorted:
-            ts = datetime.fromtimestamp(f.stat().st_mtime).strftime("%H:%M")
+            mod_time = datetime.fromtimestamp(f.stat().st_mtime)
+            date_str = mod_time.strftime("%d-%b-%Y")
+            time_str = mod_time.strftime("%H:%M:%S")
             size = fmt_size(f.stat().st_size)
-            iid = tree.insert("", "end", values=(ts, size))
+            if archive_only_mode:
+                iid = tree.insert("", "end", values=(date_str, time_str, size))
+            else:
+                iid = tree.insert("", "end", values=(time_str, size))
             self._iid_to_path[iid] = f
 
         tree.pack(fill="both", expand=True)
@@ -472,7 +530,7 @@ class Worker(threading.Thread):
             parent: tk.Tk,
             cancel_event: threading.Event,
             unmount_after_copy: bool,
-            copy_only: bool,
+            archive_only: bool,
             ):
         super().__init__(daemon=True)
         self.ui_queue = ui_queue
@@ -484,7 +542,7 @@ class Worker(threading.Thread):
         self.labels_map = load_labels_map()
         self.pick_reply_queue: "queue.Queue[List[str] | None]" = queue.Queue()
         self.unmount_after_copy = unmount_after_copy
-        self.copy_only = copy_only
+        self.archive_only = archive_only
 
     def post(self, msg: str) -> None:
         self.ui_queue.put(msg)
@@ -501,12 +559,12 @@ class Worker(threading.Thread):
 
         name = self.name_val.strip()
         email = self.email_val.strip()
-        local = sanitize_localpart(email) if email else ""
         name_sane = sanitize_name(name) if name else ""
+        email_sane = sanitize_email_for_filename(email) if email else ""
 
         # Load config only if emailing
         conf = None
-        if not self.copy_only:
+        if not self.archive_only:
             try:
                 conf = read_config()
             except Exception as e:
@@ -553,7 +611,7 @@ class Worker(threading.Thread):
             return
 
         # Selection logic
-        if self.copy_only:
+        if self.archive_only:
             # Show the 5 most recent FIT files (by mtime), let user multi-select
             files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
             recent = files_sorted[:5] if len(files_sorted) > 5 else files_sorted
@@ -568,37 +626,62 @@ class Worker(threading.Thread):
                 self.post("ERROR|No file selected.")
                 return
         else:
-                # Email mode: prefer today's files; if none, fall back to latest single file
-                today_date = date.today()
-                todays = [f for f in files if datetime.fromtimestamp(f.stat().st_mtime).date() == today_date]
-                if len(todays) == 0:
-                    selected_paths = [str(max(files, key=lambda p: p.stat().st_mtime))]
-                elif len(todays) == 1:
-                    selected_paths = [str(todays[0])]
-                else:
-                    self.post("ASK_PICK|" + json.dumps([str(p) for p in todays]))
-                    selected_paths = self._receive_pick_selection()
-                    if selected_paths is None:
-                        self.post("ERROR|No file selected.")
-                        return
+            # Email mode: only consider files with today's modification date.
+            today_date = date.today()
+            todays_files = [f for f in files if datetime.fromtimestamp(f.stat().st_mtime).date() == today_date]
+
+            if not todays_files:
+                self.post("ERROR|No activity files from today were found on the watch.")
+                return
+            elif len(todays_files) == 1:
+                selected_paths = [str(todays_files[0])]
+            else:
+                self.post("ASK_PICK|" + json.dumps([str(p) for p in todays_files]))
+                selected_paths = self._receive_pick_selection()
+                if not selected_paths:
+                    self.post("ERROR|No file was selected to email.")
+                    return
 
         selected = [Path(s) for s in selected_paths]
 
-        # Prepare sent dir and copy with proper naming
-        day = datetime.now().strftime("%Y%m%d")
-        sent_dir = SENT_ROOT / day
-        sent_dir.mkdir(parents=True, exist_ok=True)
-
         saved_paths: List[Path] = []
         for src in selected:
-            if not self.copy_only:
+            # Determine the correct date string and save directory for each file.
+            # In email mode, this is always today's date.
+            # In archive mode, it's the activity date from the file.
+            activity_date_str = datetime.now().strftime("%Y%m%d")
+
+            if not self.archive_only:
+                # Email mode: use today's date for directory and filename
+                save_root = SENT_ROOT
                 if label:
-                    newname = f"{day}_{label}_{name_sane}_{local}_{src.name}"
+                    newname = f"{activity_date_str}_{label}_{name_sane}_{email_sane}_{src.name}"
                 else:
-                    newname = f"{day}_{name_sane}_{local}_{src.name}"
+                    newname = f"{activity_date_str}_{name_sane}_{email_sane}_{src.name}"
             else:
-                newname = f"{day}_{label}_{src.name}" if label else f"{day}_{src.name}"
-            dest = sent_dir / newname
+                # Archive mode: determine activity date from file for directory and filename
+                save_root = ARCHIVE_ROOT
+                # 1. Fallback to file modification date
+                activity_date_str = datetime.fromtimestamp(src.stat().st_mtime).strftime("%Y%m%d")
+                # 2. Try to get the actual recording date from the FIT file
+                if FITPARSE_OK:
+                    try:
+                        fitfile = FitFile(src)
+                        time_created = None
+                        for record in fitfile.get_messages('file_id'):
+                            if record.get_value('time_created'):
+                                time_created = record.get_value('time_created')
+                                break
+                        if time_created:
+                            activity_date_str = time_created.strftime("%Y%m%d")
+                    except Exception:
+                        pass # Fallback to file modification date on any parsing error
+                newname = f"{activity_date_str}_{label}_{src.name}" if label else f"{activity_date_str}_{src.name}"
+
+            # Create the dated directory and define the final destination path
+            save_dir = save_root / activity_date_str
+            save_dir.mkdir(parents=True, exist_ok=True)
+            dest = save_dir / newname
             try:
                 dest.write_bytes(src.read_bytes())
             except PermissionError:
@@ -611,22 +694,23 @@ class Worker(threading.Thread):
             saved_paths.append(dest)
 
         # Eject after copy
-        # NEW RULE: In Copy-Only mode, ALWAYS eject
         eject_result = None
-        if self.copy_only or self.unmount_after_copy:
+        # In Archive mode, always eject. In Email mode, respect the checkbox.
+        should_eject = self.archive_only or self.unmount_after_copy
+        if should_eject:
             if IS_MAC:
                 eject_result = mac_eject(root)
             else:
                 eject_result = win_eject_drive(root)
 
-        # Email or copy-only completion
-        if self.copy_only:
+        # Email or archive-only completion
+        if self.archive_only:
             # Log and profile
             prof = {
                     "device_id": device_id,
                     "model": model,
-                    "last_copied_files": [p.name for p in saved_paths],
-                    "last_action": "copy_only",
+                    "last_archived_files": [p.name for p in saved_paths],
+                    "last_action": "archive_only",
                     "last_time": datetime.now().isoformat(timespec="seconds"),
                     }
             try:
@@ -637,12 +721,15 @@ class Worker(threading.Thread):
             elapsed = int(time.time() - self.start_ts)
             for src, dest in zip(selected, saved_paths):
                 log_line(
-                        f"COPIED  label={(label or '')}  file={dest}  src={src.name}  "
-                        f"device_id={(device_id or '')}  model={model}  duration={elapsed}s  mode=COPY_ONLY"
+                        f"ARCHIVED  label={(label or '')}  file={dest}  src={src.name}  "
+                        f"device_id={(device_id or '')}  model={model}  duration={elapsed}s  mode=ARCHIVE_ONLY"
                         )
 
-            text = "Eject successful, please attach the next watch to the USB cable."
-            self.post("DONE|" + text + "|100|" + str(sent_dir) + "|MODE:COPY_ONLY")
+            if eject_result:
+                text = "Eject successful, please attach the next watch to the USB cable."
+            else:
+                text = "Archive complete. Please eject and attach the next watch."
+            self.post("DONE|" + text + "|100|" + str(save_dir) + "|MODE:ARCHIVE_ONLY")
             return
 
         # Send single email with all attachments
@@ -681,7 +768,7 @@ class Worker(threading.Thread):
                     f"src={src.name}  device_id={(device_id or '')}  model={model}  duration={elapsed}s  mode=EMAIL"
                     )
 
-        self.post("DONE|Email sent.|100|" + str(sent_dir) + "|MODE:EMAIL")
+        self.post("DONE|Email sent.|100|" + str(save_dir) + "|MODE:EMAIL")
 
     def _receive_pick_selection(self) -> Optional[List[str]]:
         try:
@@ -769,11 +856,14 @@ class App(tk.Tk):
         opts_row = ttk.Frame(frm)
         opts_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 0))
         self.unmount_var = tk.BooleanVar(value=True)      # default checked
-        self.copyonly_var = tk.BooleanVar(value=False)    # default unchecked
+        self.archive_only_var = tk.BooleanVar(value=False)    # default unchecked
+        self.archive_only_cb = ttk.Checkbutton(opts_row, text="Archive only, do not send mail", variable=self.archive_only_var, command=self._on_archive_only_toggle)
+        self.archive_only_cb.pack(side="left")
+
+        # Unmount checkbox is only visible in dev mode
         self.unmount_cb = ttk.Checkbutton(opts_row, text="Unmount after copy", variable=self.unmount_var)
-        self.copyonly_cb = ttk.Checkbutton(opts_row, text="Copy only, do not send mail", variable=self.copyonly_var, command=self._on_copyonly_toggle)
-        self.unmount_cb.pack(side="left", padx=(0, 16))
-        self.copyonly_cb.pack(side="left")
+        if DEVMODE_FLAG.exists():
+            self.unmount_cb.pack(side="left", padx=(0, 16), before=self.archive_only_cb)
 
         self.hint = ttk.Label(frm, text="Attach your Garmin via USB (Mass Storage).", style="Small.TLabel")
         self.hint.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 10))
@@ -785,8 +875,8 @@ class App(tk.Tk):
         ttk.Label(frm, textvariable=self.status_var).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
         # Open Sent Folder button
-        self.open_sent_btn = ttk.Button(frm, text="Open Sent Folder", command=self._open_sent, state="disabled")
-        self.open_sent_btn.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.open_folder_btn = ttk.Button(frm, text="Open Sent Folder", command=self._open_folder, state="disabled")
+        self.open_folder_btn.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         # Timer and countdown
         self.timer_var = tk.StringVar(value="Timer: 0s")
@@ -807,6 +897,13 @@ class App(tk.Tk):
         self.retry_btn = ttk.Button(btn_row, text="Retry", command=self._retry, state="disabled")
         self.retry_btn.pack(side="right")
 
+        # Version label
+        is_frozen = getattr(sys, "_MEIPASS", None) is not None
+        version_str = f"Version: {APP_VERSION}"
+        if not is_frozen:
+            version_str += " (local)"
+        ttk.Label(frm, text=version_str, style="Small.TLabel", foreground="gray").grid(row=9, column=0, sticky="w", pady=(10, 0))
+
         # Bindings
         self.after(100, self.name_entry.focus_set)
         self.email_entry.bind("<Return>", lambda _e: self._submit())  # Enter in Email triggers submit (B2)
@@ -814,16 +911,16 @@ class App(tk.Tk):
         self.email_var.trace_add("write", self._validate_form)
         self.after(100, self._drain_queue)
 
-        # Initial UI reflect + start watcher for auto-start in copy-only mode
-        self._reflect_copyonly_state()
-        self.after(1000, self._watch_mount_if_copyonly)
+        # Initial UI reflect + start watcher for auto-start in archive-only mode
+        self._reflect_archive_only_state()
+        self.after(1000, self._watch_mount_if_archive_only)
 
     # --- UI helpers ---------------------------------------------------------
     def _validate_form(self, *_):
-        if self.copyonly_var.get():
+        if self.archive_only_var.get():
             self.submit_btn.configure(state="normal" if not self.running else "disabled")
             if not self.running:
-                self.status_var.set("Copy-only mode: attach a watch to begin")
+                self.status_var.set("Archive-only mode: attach a watch to begin")
             return
 
         name_ok = bool(self.name_var.get().strip())
@@ -832,52 +929,53 @@ class App(tk.Tk):
         if not self.running:
             self.status_var.set("Waiting for name and email" if not (name_ok and email_ok) else "Ready to submit")
 
-    def _on_copyonly_toggle(self):
-        self._reflect_copyonly_state()
+    def _on_archive_only_toggle(self):
+        self._reflect_archive_only_state()
         self._validate_form()
 
         # NEW: If toggled ON and a GARMIN volume is already mounted → start immediately.
-        if self.copyonly_var.get() and not self.running:
+        if self.archive_only_var.get() and not self.running:
             vol = find_current_garmin_volume()
             if vol is not None:
                 # Reset timer for this auto-run
                 self.current_submission_key = None
                 self._start_flow(name="", email="", reset_timer=True,
                                  unmount_after_copy=self.unmount_var.get(),
-                                 copy_only=True)
+                                 archive_only=True)
             else:
-                self.status_var.set("Copy-only mode: waiting for GARMIN volume...")
+                self.status_var.set("Archive-only mode: waiting for GARMIN volume...")
 
-    def _reflect_copyonly_state(self):
-        copy_only = self.copyonly_var.get()
+    def _reflect_archive_only_state(self):
+        archive_only = self.archive_only_var.get()
         # Enable/disable inputs
-        state = "disabled" if copy_only else "normal"
+        state = "disabled" if archive_only else "normal"
         self.name_entry.configure(state=state)
         self.email_entry.configure(state=state)
-        if copy_only:
-            self.status_var.set("Copy-only mode: attach a watch to begin")
+        self.open_folder_btn.configure(text="Open Archive Folder" if archive_only else "Open Sent Folder")
+        if archive_only:
+            self.status_var.set("Archive-only mode: attach a watch to begin")
         else:
             self.status_var.set("Waiting for name and email")
 
-    def _watch_mount_if_copyonly(self):
+    def _watch_mount_if_archive_only(self):
         """
-        Poll every 1s: if copy-only mode is ON, not running, and exactly one GARMIN volume is mounted → auto-start.
+        Poll every 1s: if archive-only mode is ON, not running, and exactly one GARMIN volume is mounted → auto-start.
         """
         try:
-            if self.copyonly_var.get() and not self.running:
+            if self.archive_only_var.get() and not self.running:
                 vol = find_current_garmin_volume()
                 if vol is not None:
                     # Reset timer for this auto-run
                     self.current_submission_key = None
                     self._start_flow(name="", email="", reset_timer=True,
                                      unmount_after_copy=self.unmount_var.get(),
-                                     copy_only=True)
+                                     archive_only=True)
                 else:
                     # keep a friendly status while waiting
-                    if self.status_var.get().strip() == "" or "Copy-only" not in self.status_var.get():
-                        self.status_var.set("Copy-only mode: waiting for GARMIN volume...")
+                    if self.status_var.get().strip() == "" or "Archive-only" not in self.status_var.get():
+                        self.status_var.set("Archive-only mode: waiting for GARMIN volume...")
         finally:
-            self.after(1000, self._watch_mount_if_copyonly)
+            self.after(1000, self._watch_mount_if_archive_only)
 
     # Timer helpers
     def _start_timer(self, reset: bool) -> None:
@@ -912,11 +1010,11 @@ class App(tk.Tk):
         if self.running:
             return
 
-        copy_only = self.copyonly_var.get()
+        archive_only = self.archive_only_var.get()
         name = self.name_var.get().strip()
         email = self.email_var.get().strip()
 
-        if not copy_only:
+        if not archive_only:
             if not name:
                 messagebox.showinfo("Garmin Mailer", "Please enter a name.")
                 return
@@ -925,11 +1023,11 @@ class App(tk.Tk):
                 return
 
         # Timer reset per watch
-        submission_key = f"{'COPYONLY' if copy_only else name}|{'COPYONLY' if copy_only else email}"
+        submission_key = f"{'ARCHIVE_ONLY' if archive_only else name}|{'ARCHIVE_ONLY' if archive_only else email}"
         reset_timer = (self.current_submission_key is None) or (submission_key != self.current_submission_key)
         self.current_submission_key = submission_key
 
-        self._start_flow(name, email, reset_timer, self.unmount_var.get(), copy_only)
+        self._start_flow(name, email, reset_timer, self.unmount_var.get(), archive_only)
 
     def _set_pb_indeterminate(self, on: bool) -> None:
         try:
@@ -942,13 +1040,13 @@ class App(tk.Tk):
         except Exception:
             pass
 
-    def _start_flow(self, name: str, email: str, reset_timer: bool, unmount_after_copy: bool, copy_only: bool) -> None:
+    def _start_flow(self, name: str, email: str, reset_timer: bool, unmount_after_copy: bool, archive_only: bool) -> None:
         self.running = True
         self.retry_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
         self.submit_btn.configure(state="disabled")
         self.cancel_event.clear()
-        self.open_sent_btn.configure(state="disabled")
+        self.open_folder_btn.configure(state="disabled")
         self._set_status("Detecting Garmin watch...", None)
         self._show_detect_countdown(DETECT_TIMEOUT)
         self._set_pb_indeterminate(True)
@@ -956,7 +1054,7 @@ class App(tk.Tk):
         self.worker = Worker(
                 self.queue, name, email, self, self.cancel_event,
                 unmount_after_copy=unmount_after_copy,
-                copy_only=copy_only
+                archive_only=archive_only
                 )
         self.worker.start()
 
@@ -977,8 +1075,8 @@ class App(tk.Tk):
         self._show_detect_countdown(DETECT_TIMEOUT)
         name = self.name_var.get().strip()
         email = self.email_var.get().strip()
-        copy_only = self.copyonly_var.get()
-        if copy_only or (name and EMAIL_RE.match(email)):
+        archive_only = self.archive_only_var.get()
+        if archive_only or (name and EMAIL_RE.match(email)):
             self._set_pb_indeterminate(True)
             self.running = True
             self.retry_btn.configure(state="disabled")
@@ -987,11 +1085,11 @@ class App(tk.Tk):
             self.worker = Worker(
                     self.queue, name, email, self, self.cancel_event,
                     unmount_after_copy=self.unmount_var.get(),
-                    copy_only=copy_only
+                    archive_only=archive_only
                     )
             self.worker.start()
         else:
-            messagebox.showinfo("Garmin Mailer", "Enter a valid name and email first (or enable Copy-only).")
+            messagebox.showinfo("Garmin Mailer", "Enter a valid name and email first (or enable Archive-only).")
 
     def _drain_queue(self) -> None:
         try:
@@ -1036,7 +1134,7 @@ class App(tk.Tk):
                     prog = int(sub[1]) if len(sub) > 1 else 100
                     self._last_sent_dir = Path(sub[2]) if len(sub) > 2 else None
                     mode_tag = sub[3] if len(sub) > 3 else "MODE:EMAIL"
-                    mode = "EMAIL" if mode_tag.endswith("EMAIL") else "COPY_ONLY"
+                    mode = "EMAIL" if mode_tag.endswith("EMAIL") else "ARCHIVE_ONLY"
                     self._set_pb_indeterminate(False)
                     self._hide_detect_countdown()
                     self._set_status(text, prog)
@@ -1056,7 +1154,11 @@ class App(tk.Tk):
                         paths = [Path(s) for s in json.loads(raw)]
                     except Exception:
                         paths = []
-                    chosen = FileChoiceDialog.choose(self, paths) if paths else None
+                    # Pass copy_only status to the dialog
+                    archive_only_mode = False
+                    if self.worker:
+                        archive_only_mode = self.worker.archive_only
+                    chosen = FileChoiceDialog.choose(self, paths, archive_only_mode) if paths else None
                     if self.worker and hasattr(self.worker, "pick_reply_queue"):
                         if chosen:
                             self.worker.pick_reply_queue.put([str(p) for p in chosen])
@@ -1079,7 +1181,7 @@ class App(tk.Tk):
         self._stop_timer()
         self.running = False
         self.cancel_btn.configure(state="disabled")
-        self.open_sent_btn.configure(state="normal")
+        self.open_folder_btn.configure(state="normal")
         try:
             self.bell()
         except Exception:
@@ -1106,15 +1208,16 @@ class App(tk.Tk):
             self.after(2000, _clear_inputs)
             self.submit_btn.configure(state="normal")
         else:
-            # COPY_ONLY: show prompt for next watch
+            # ARCHIVE_ONLY: show prompt for next watch
             self.status_var.set(message)
             self.pb["value"] = 100
+            self.open_folder_btn.configure(state="normal")
             messagebox.showinfo("Garmin Mailer", message)
             # Ready for next cycle (fields remain disabled in copy-only)
             self._validate_form()
             self.submit_btn.configure(state="normal")
 
-    def _on_error(self, _text: str) -> None:
+    def _on_error(self, text: str) -> None:
         self._stop_timer()
         self.running = False
         self.cancel_btn.configure(state="disabled")
@@ -1122,11 +1225,16 @@ class App(tk.Tk):
             self.bell()  # audible ding on error/timeouts
         except Exception:
             pass
+        messagebox.showerror("Garmin Mailer Error", text)
         self.retry_btn.configure(state="normal")
         self._validate_form()
 
-    def _open_sent(self) -> None:
-        target = self._last_sent_dir or SENT_ROOT
+    def _open_folder(self) -> None:
+        archive_only = self.archive_only_var.get()
+        if archive_only:
+            target = self._last_sent_dir or ARCHIVE_ROOT
+        else:
+            target = self._last_sent_dir or SENT_ROOT
         try:
             if IS_MAC:
                 subprocess.run(["open", str(target)], check=False)

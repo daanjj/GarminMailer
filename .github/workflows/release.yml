@@ -30,12 +30,12 @@ jobs:
       - name: Build macOS .app Bundle
         if: runner.os == 'macOS'
         run: |
-          pyinstaller --onedir --windowed --name="GarminMailer" garmin_mail_gui.py
+          pyinstaller --onedir --windowed --name="GarminMailer" --icon="icon/icon.icns" garmin_mail_gui.py
           zip -r GarminMailer-macOS.zip dist/GarminMailer.app
 
       - name: Build Windows Executable
         if: runner.os == 'Windows'
-        run: pyinstaller --onefile --noconsole --name="GarminMailer" garmin_mail_gui.py
+        run: pyinstaller --onefile --noconsole --name="GarminMailer" --icon="icon/icon.ico" garmin_mail_gui.py
 
       - name: Upload macOS Artifact
         if: runner.os == 'macOS'
