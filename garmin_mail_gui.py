@@ -955,9 +955,9 @@ class App(tk.Tk):
         self.retry_btn.pack(side="right")
 
         # Version label
-        is_frozen = getattr(sys, "_MEIPASS", None) is not None
+        # Show (local) if version wasn't embedded by build system (GitHub Actions)
         version_str = f"Version: {APP_VERSION}"
-        if not is_frozen:
+        if BUILD_VERSION is None:
             version_str += " (local)"
         ttk.Label(frm, text=version_str, style="Small.TLabel", foreground="gray").grid(row=9, column=0, sticky="w", pady=(10, 0))
 
