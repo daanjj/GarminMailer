@@ -1,9 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 from pathlib import Path
 
-version_file = Path(__file__).with_name("version.txt")
-version_kwargs = {"version": str(version_file)} if version_file.exists() else {}
+version_kwargs = {}
+version_file_env = os.environ.get("GARMIN_MAILER_VERSION_FILE")
+if version_file_env:
+    vf = Path(version_file_env)
+    if vf.exists():
+        version_kwargs["version"] = str(vf)
 
 a = Analysis(
     ['garmin_mail_gui.py'],
