@@ -39,16 +39,16 @@ jobs:
       - name: Build macOS .app Bundle
         if: runner.os == 'macOS'
         run: |
-          echo "${{ github.ref_name }}" > version.txt
-          pyinstaller --onedir --windowed --name="GarminMailer" --icon="icon/icon.icns" --add-data "version.txt:." garmin_mail_gui.py
+          # Embed version directly in source code
+          sed -i '' "s/BUILD_VERSION = None/BUILD_VERSION = \"${{ github.ref_name }}\"/" garmin_mail_gui.py
+          pyinstaller --onedir --windowed --name="GarminMailer" --icon="icon/icon.icns" garmin_mail_gui.py
           zip -r GarminMailer-macOS.zip dist/GarminMailer.app
 
       - name: Build Windows Executable
         if: runner.os == 'Windows'
         run: |
-          $version = "${{ github.ref_name }}" -replace "v", ""
-          create-version-file garmin_mail_gui.py --version $version --company "GarminMailer" --product-name "GarminMailer" --outfile version.txt
-          $env:GARMIN_MAILER_VERSION_FILE = (Resolve-Path version.txt).Path
+          # Embed version directly in source code
+          (Get-Content garmin_mail_gui.py) -replace 'BUILD_VERSION = None', 'BUILD_VERSION = "${{ github.ref_name }}"' | Set-Content garmin_mail_gui.py
           pyinstaller --onefile --noconsole GarminMailer.spec
 
       - name: Upload macOS Artifact

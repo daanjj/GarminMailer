@@ -72,38 +72,22 @@ def _resource_path(rel: str) -> Path:
     base = getattr(sys, "_MEIPASS", None)
     return (Path(base) / rel) if base else (Path(__file__).resolve().parent / rel)
 
-def get_windows_exe_version():
-    """Reads version from compiled EXE's resources on Windows."""
-    try:
-        import win32api
-        info = win32api.GetFileVersionInfo(sys.executable, '\\')
-        ms = info['FileVersionMS']
-        ls = info['FileVersionLS']
-        return f"v{win32api.HIWORD(ms)}.{win32api.LOWORD(ms)}.{win32api.HIWORD(ls)}"
-    except (ImportError, Exception):
-        return None
 
+# This will be replaced during build with actual version
+BUILD_VERSION = None
 
 def get_app_version() -> str:
     """
-    Determines the app version by finding the highest git tag starting with 'v'.
-    Falls back to a default if git is not available or no tags are found.
+    Gets app version from build-time embedded version, or falls back to git tags.
     """
     default_version = "v9.2"
+    
+    # If version was embedded at build time, use it
+    if BUILD_VERSION:
+        return BUILD_VERSION
+    
+    # Otherwise fall back to git tags (for development)
     try:
-        # On Windows, when frozen, try to get version from EXE resources first
-        if IS_WINDOWS and getattr(sys, "_MEIPASS", None):
-            exe_version = get_windows_exe_version()
-            if exe_version:
-                return exe_version
-            # On macOS, when frozen, try to get version from bundled version.txt
-        if IS_MAC and getattr(sys, "_MEIPASS", None):
-            version_file = _resource_path("version.txt")
-            if version_file.exists():
-                exe_version = version_file.read_text(encoding="utf-8").strip()
-                if exe_version:
-                    return exe_version
-        # Run git command to list all tags
         script_dir = Path(__file__).resolve().parent
         result = subprocess.run(
             ["git", "tag"],
@@ -119,16 +103,13 @@ def get_app_version() -> str:
             return default_version
 
         # Sort tags using a key that handles version numbers correctly
-        # (e.g., v1.10.0 > v1.2.0)
         def version_key(v):
             try:
                 return [int(p) for p in v[1:].split('.')]
             except ValueError:
-                # Fallback for malformed version strings
                 return [0, 0, 0]
         return max(v_tags, key=version_key)
     except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
-        # Fallback on any error (git not found, not a repo, parsing error)
         return default_version
 
 # ---------------------------------------------------------------------------
