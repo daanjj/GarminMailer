@@ -6,7 +6,7 @@ GarminMailer is a cross-platform Tkinter desktop application that detects Garmin
 ## Core Architecture & Data Flow
 
 ### Single-File Application
-- **Main file**: `garmin_mail.py` (~1300 lines) - contains the entire application
+- **Main file**: `garmin_mailer.py` (~1300 lines) - contains the entire application
 - **Threading model**: Main UI thread + background `Worker` thread communicating via `queue.Queue`
 - **Cross-platform detection**: Platform-specific USB volume detection for macOS (`/Volumes/`) and Windows (drive letters)
 
