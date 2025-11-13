@@ -36,8 +36,8 @@ jobs:
       - name: Build Windows Executable
         run: |
           # Embed version directly in source code
-          (Get-Content garmin_mail_gui.py) -replace 'BUILD_VERSION = None', 'BUILD_VERSION = "${{ github.ref_name }}"' | Set-Content garmin_mail_gui.py
-          pyinstaller --onefile --noconsole --name="GarminMailer" garmin_mail_gui.py
+          (Get-Content garmin_mail.py) -replace 'BUILD_VERSION = None', 'BUILD_VERSION = "${{ github.ref_name }}"' | Set-Content garmin_mail.py
+          pyinstaller --onefile --noconsole --name="GarminMailer" garmin_mail.py
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
@@ -70,7 +70,7 @@ jobs:
       - name: Build macOS .app Bundle
         run: |
           # Embed version directly in source code
-          sed -i '' "s/BUILD_VERSION = None/BUILD_VERSION = \"${{ github.ref_name }}\"/" garmin_mail_gui.py
+          sed -i '' "s/BUILD_VERSION = None/BUILD_VERSION = \"${{ github.ref_name }}\"/" garmin_mail.py
           pyinstaller GarminMailer.spec
           zip -r GarminMailer-macOS.zip dist/GarminMailer.app
 

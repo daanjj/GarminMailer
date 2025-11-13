@@ -9,7 +9,7 @@ if os.path.exists('default-mail-template.txt'):
     datas.append(('default-mail-template.txt', '.'))
 
 a = Analysis(
-    ['garmin_mail_gui.py'],
+    ['garmin_mail.py'],
     pathex=[],
     binaries=[],
     datas=datas,
