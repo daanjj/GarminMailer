@@ -76,11 +76,39 @@ def _resource_path(rel: str) -> Path:
 # This will be replaced during build with actual version
 BUILD_VERSION = None
 
+def parse_semver(version_str: str) -> tuple[int, int, int]:
+    """
+    Parse a semantic version string (e.g., 'v1.2.3') into major, minor, patch integers.
+    Returns (0, 0, 0) if parsing fails.
+    """
+    try:
+        # Remove 'v' prefix if present
+        clean_version = version_str[1:] if version_str.startswith('v') else version_str
+        parts = clean_version.split('.')
+        
+        # Ensure we have exactly 3 parts for proper semver
+        if len(parts) >= 3:
+            return int(parts[0]), int(parts[1]), int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0]), int(parts[1]), 0
+        elif len(parts) == 1:
+            return int(parts[0]), 0, 0
+        else:
+            return 0, 0, 0
+    except (ValueError, IndexError):
+        return 0, 0, 0
+
+def is_valid_semver(version_str: str) -> bool:
+    """Check if a version string follows semantic versioning format."""
+    major, minor, patch = parse_semver(version_str)
+    return not (major == 0 and minor == 0 and patch == 0 and version_str not in ['v0.0.0', '0.0.0'])
+
 def get_app_version() -> str:
     """
     Gets app version from build-time embedded version, or falls back to git tags.
+    Prioritizes proper semantic versions.
     """
-    default_version = "v9.2"
+    default_version = "v1.5.0"  # Updated to proper semver
     
     # If version was embedded at build time, use it
     if BUILD_VERSION:
@@ -97,18 +125,17 @@ def get_app_version() -> str:
             cwd=script_dir
         )
         tags = result.stdout.strip().split('\n')
-        v_tags = [t for t in tags if t and t.startswith('v')]
+        v_tags = [t for t in tags if t and t.startswith('v') and is_valid_semver(t)]
 
         if not v_tags:
             return default_version
 
-        # Sort tags using a key that handles version numbers correctly
-        def version_key(v):
-            try:
-                return [int(p) for p in v[1:].split('.')]
-            except ValueError:
-                return [0, 0, 0]
-        return max(v_tags, key=version_key)
+        # Sort tags using semantic version comparison
+        def semver_key(v):
+            major, minor, patch = parse_semver(v)
+            return (major, minor, patch)
+            
+        return max(v_tags, key=semver_key)
     except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
         return default_version
 
