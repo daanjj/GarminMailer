@@ -3,7 +3,7 @@
 from pathlib import Path
 
 version_file = Path(__file__).with_name("version.txt")
-version_info = str(version_file) if version_file.exists() else None
+version_kwargs = {"version": str(version_file)} if version_file.exists() else {}
 
 a = Analysis(
     ['garmin_mail_gui.py'],
@@ -36,7 +36,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=version_info,
+    **version_kwargs,
 )
 coll = COLLECT(
     exe,
