@@ -25,7 +25,7 @@ GarminMailer is a simple desktop application designed for workshops and events. 
 
 It has two main modes:
 *   **Email Mode**: Copies activity files and sends them as attachments in an email.
-*   **Copy-Only Mode**: Copies activity files to a local folder without sending an email.
+*   **Archive Mode**: Copies activity files to a local folder without sending an email.
 
 ## Installation
 
@@ -46,10 +46,10 @@ First, download the latest version of the application from the [GitHub Releases 
 
 ## Modes of Operation
 
-The application's behavior is controlled by the **"Copy only, do not send mail"** checkbox:
+The application's behavior is controlled by the **"Archive only, do not send mail"** checkbox:
 
 *   **Unchecked (Default)**: The application is in **Email Mode**. It requires a name, a recipient email, and a one-time configuration to send emails.
-*   **Checked**: The application is in **Copy-Only Mode**. It does not require any configuration and will automatically start when a watch is connected.
+*   **Checked**: The application is in **Archive Mode**. It does not require any configuration and will automatically start when a watch is connected.
 
 ## Configuration (for Email Mode)
 
@@ -103,23 +103,25 @@ Use this mode to send activity files to participants.
     *   If multiple activities from today are found, a dialog will appear asking you to select which ones to send.
 7.  After a successful send, the Name and Email fields will clear, ready for the next user.
 
-### Copy-Only Mode
+### Archive Mode
 
 Use this mode to quickly back up files from multiple watches to your computer.
 
 1.  Launch the GarminMailer application.
-2.  Check the **"Copy only, do not send mail"** checkbox. The Name and Email fields will be disabled.
+2.  Check the **"Archive only, do not send mail"** checkbox. The Name and Email fields will be disabled.
 3.  Connect a Garmin watch. The process will start automatically.
 4.  A dialog will appear showing the 5 most recent activities. Select the file(s) you wish to copy and click **Select**.
-5.  The files are copied to a dated subfolder within `Documents/GarminMailer/sent/`.
+5.  The files are copied to a dated subfolder within `Documents/GarminMailer/archive/`. The folder date is based on the activity's recording date.
 6.  The watch will be ejected, and a message will appear prompting you to connect the next watch.
 
 ## Troubleshooting
 
 *   **"No Garmin watch detected"**: Ensure the watch is connected properly and is in "Mass Storage" or "File Transfer" mode (not "Garmin" mode). Try a different USB port or cable.
+*   **"No activity files from today were found"**: In Email Mode, the app will only look for files with today's date. If you need to archive older files, use Archive Mode.
 *   **"Config not found"**: Make sure the `mailer.conf.json` file is correctly named and located in the `Documents/GarminMailer` folder.
-*   **"AUTH: Gmail rejected login"**: This almost always means you are using your regular password instead of an **App Password**. Please see the configuration section above.
+*   **"AUTH: ... rejected login"**: This almost always means you are using your regular password instead of an **App Password**. Please see the configuration section above.
 *   **macOS Security Warning**: If the app won't open, right-click the app icon and select **Open**.
 *   **Files are not found**: Make sure the watch has `.fit` activity files stored in its `GARMIN/Activity/` folder.
+*   **Log File**: For more detailed errors, you can check the log file located at `Documents/GarminMailer/GarminMailer.log`.
 
 ---
