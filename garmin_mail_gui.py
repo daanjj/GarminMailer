@@ -170,7 +170,9 @@ def read_config() -> dict:
     if not CONF.exists():
         raise RuntimeError(
                 f"Config not found: {CONF}\n"
-                "Create JSON with the Gmail SMTP server, port 465, your username and App Password."
+                "Copy 'example.mailer.conf.json' from the GarminMailer application folder into "
+                f"'{CONF}' (rename it to 'mailer.conf.json') and fill in your SMTP server, port, "
+                "username, and App Password."
                 )
     data = json.loads(CONF.read_text(encoding="utf-8"))
     for k in ["smtp_server", "smtp_port", "username", "password"]:
