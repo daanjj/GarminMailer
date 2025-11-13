@@ -25,7 +25,7 @@ Folders:
     - mail-template.txt     (auto-created)
     - watch-labels.csv      (auto-created)
     - sent/YYYYMMDD/
-    - Devices/<device_id>/profile.json
+    - devices/<device_id>/profile.json
 """
 
 import os
@@ -39,6 +39,7 @@ import re
 import string
 import threading
 import queue
+import textwrap
 import xml.etree.ElementTree as ET
 from datetime import datetime, date
 from email.message import EmailMessage
@@ -104,7 +105,7 @@ ARCHIVE_ROOT = BASE / "archive"
 LOGFILE  = BASE / "GarminMailer.log"
 CONF     = BASE / "mailer.conf.json"
 TEMPLATE = BASE / "mail-template.txt"
-DEVICES_DIR = BASE / "Devices"
+DEVICES_DIR = BASE / "devices"
 LABELS_CSV = BASE / "watch-labels.csv"       # device_id,label
 DEVMODE_FLAG = BASE / ".devmode"
 DETECT_TIMEOUT = 30                          # seconds to wait for mount
@@ -876,9 +877,11 @@ class App(tk.Tk):
         self.status_var = tk.StringVar(value="Waiting for name and email")
         ttk.Label(frm, textvariable=self.status_var).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
-        # Open Sent Folder button
-        self.open_folder_btn = ttk.Button(frm, text="Open Sent Folder", command=self._open_folder, state="disabled")
-        self.open_folder_btn.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        # Open folder + Help buttons
+        self.open_folder_btn = ttk.Button(frm, text="Open 'sent' folder", command=self._open_folder, state="disabled")
+        self.open_folder_btn.grid(row=6, column=0, sticky="w", pady=(8, 0))
+        self.help_btn = ttk.Button(frm, text="Help", command=self._show_help)
+        self.help_btn.grid(row=6, column=1, sticky="e", pady=(8, 0))
 
         # Timer and countdown
         self.timer_var = tk.StringVar(value="Timer: 0s")
@@ -953,7 +956,7 @@ class App(tk.Tk):
         state = "disabled" if archive_only else "normal"
         self.name_entry.configure(state=state)
         self.email_entry.configure(state=state)
-        self.open_folder_btn.configure(text="Open Archive Folder" if archive_only else "Open Sent Folder")
+        self.open_folder_btn.configure(text="Open 'archive' folder" if archive_only else "Open 'sent' folder")
         if archive_only:
             self.status_var.set("Archive-only mode: attach a watch to begin")
         else:
@@ -978,6 +981,34 @@ class App(tk.Tk):
                         self.status_var.set("Archive-only mode: waiting for GARMIN volume...")
         finally:
             self.after(1000, self._watch_mount_if_archive_only)
+
+    def _show_help(self):
+        help_text = textwrap.dedent(f"""
+            Garmin Mailer copies FIT activities from a connected Garmin watch and either emails them to the email address specified or archives them for later reference.
+
+            Email vs archive-only:
+              - Email (default): enter Name and Recipient email, then click Submit. The app emails the selected .FIT files and saves today's activities into {SENT_ROOT}/YYYYMMDD.
+              - Archive only: check "Archive only, do not send mail". Name/email are disabled and the app auto-starts when exactly one GARMIN volume is mounted. Files are renamed by activity date and stored under {ARCHIVE_ROOT}/YYYYMMDD with no email sent.
+
+            Storage under {BASE}:
+              - sent/YYYYMMDD/: copies of files that were emailed
+              - archive/YYYYMMDD/: archive-only copies (organized by activity date)
+              - devices/<device_id>/profile.json: remembers the label/model for each watch
+              - mail-template.txt: edit the outgoing email body
+              - watch-labels.csv: map Garmin device_ids to workshop labels (CSV with "device_id,label" per line)
+              - GarminMailer.log: timestamped record of actions and errors
+
+            Configuring emailing:
+              1. Copy example.mailer.conf.json (from the GarminMailer folder) into {CONF}.
+              2. Fill smtp_server, smtp_port, username, and password (use an app password).
+              3. Restart Garmin Mailer so it reads the settings. Archive-only mode works without this file, but emailing requires it.
+
+            Updating watch labels:
+              1. Open {LABELS_CSV}.
+              2. Each line is "device_id,label" (for example A1B2C3D4,21).
+              3. Save the file; the next time that watch connects the label populates automatically.
+            """).strip()
+        messagebox.showinfo("Garmin Mailer Help", help_text, parent=self)
 
     # Timer helpers
     def _start_timer(self, reset: bool) -> None:
