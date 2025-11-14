@@ -453,14 +453,17 @@ class FileChoiceDialog(tk.Toplevel):
     def __init__(self, parent: tk.Tk, files: List[Path], archive_only_mode: bool, preselect_single: bool = False):
         super().__init__(parent)
         if archive_only_mode:
-            self.title("Choose recent activities to archive")
-            dialog_text = "Select one or more recent activities to archive (Cmd/Ctrl-click or Shift-click):"
+            self.title("Choose activities to archive")
+            dialog_text = "Select one or more activities to archive (Cmd/Ctrl-click or Shift-click):"
         else:
             self.title("Choose today's activities")
             dialog_text = "Multiple activities found for today. Select which file(s) to email (Cmd/Ctrl-click or Shift-click):"
 
-        self.resizable(False, False)
+        self.resizable(True, True)  # Allow resizing for many files
         self.selected: Optional[List[Path]] = None
+        
+        # Set minimum size
+        self.minsize(400, 300)
 
         frm = ttk.Frame(self, padding=12)
         frm.pack(fill="both", expand=True)
@@ -471,14 +474,23 @@ class FileChoiceDialog(tk.Toplevel):
 
         columns = ("filename", "size")
 
+        # Create frame for treeview with scrollbars
+        tree_frame = ttk.Frame(frm)
+        tree_frame.pack(fill="both", expand=True, pady=(0, 8))
+        
         tree = ttk.Treeview(
-                frm,
+                tree_frame,
                 columns=columns,
                 show="headings",
-                height=min(10, len(files)),
+                height=min(15, max(5, len(files))),  # Min 5, max 15 rows visible
                 selectmode="extended"
         )
 
+        # Add scrollbars
+        v_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        h_scrollbar = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        
         tree.heading("filename", text="Filename")
         tree.heading("size", text="Size")
         tree.column("filename", width=280, anchor="w")  # Wider for filename, left-aligned
@@ -504,7 +516,14 @@ class FileChoiceDialog(tk.Toplevel):
                 tree.selection_set(iid)
             self._iid_to_path[iid] = f
 
-        tree.pack(fill="both", expand=True)
+        # Pack tree and scrollbars
+        tree.grid(row=0, column=0, sticky="nsew")
+        v_scrollbar.grid(row=0, column=1, sticky="ns")
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        
+        # Configure grid weights for proper resizing
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
 
         def finalize_selection():
             sels = tree.selection()
@@ -682,15 +701,14 @@ class Worker(threading.Thread):
 
         # Selection logic
         if self.archive_only:
-            # Show the 5 most recent FIT files (by mtime), let user multi-select
+            # Show ALL FIT files (sorted by mtime, newest first), let user multi-select
             files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
-            recent = files_sorted[:5] if len(files_sorted) > 5 else files_sorted
-            if not recent:
+            if not files_sorted:
                 if self.unmount_after_copy:
                     mac_eject(root) if IS_MAC else win_eject_drive(root)
                 self.post("ERROR|No .fit files found on the watch.")
                 return
-            self.post("ASK_PICK|" + json.dumps([str(p) for p in recent]))
+            self.post("ASK_PICK|" + json.dumps([str(p) for p in files_sorted]))
             selected_paths = self._receive_pick_selection()
             if not selected_paths:
                 self.post("ERROR|No file selected.")
