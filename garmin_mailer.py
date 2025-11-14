@@ -144,7 +144,14 @@ def get_app_version() -> str:
 # ---------------------------------------------------------------------------
 def load_config() -> dict:
     """Load configuration from config.json, create with defaults if missing."""
-    config_file = Path(__file__).parent / "config.json"
+    # For built apps, store config alongside user data; for development, use source directory
+    if getattr(sys, '_MEIPASS', None):
+        # Built app: store in user Documents/GarminMailer directory
+        config_file = Path.home() / "Documents" / "GarminMailer" / "config.json"
+    else:
+        # Development: store in source directory
+        config_file = Path(__file__).parent / "config.json"
+    
     default_config = {
         "devmode": False,
         "only_today": True
@@ -161,6 +168,8 @@ def load_config() -> dict:
                 return config
         else:
             # Create default config file
+            # Ensure parent directory exists
+            config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file, 'w') as f:
                 json.dump(default_config, f, indent=2)
             return default_config
@@ -1029,7 +1038,7 @@ class App(tk.Tk):
         email_ok = EMAIL_RE.match(self.email_var.get().strip()) is not None
         self.submit_btn.configure(state="normal" if (name_ok and email_ok and not self.running) else "disabled")
         if not self.running:
-            self.status_var.set("Waiting for name and email" if not (name_ok and email_ok) else "Ready to submit")
+            self.status_var.set("Waiting for name and email" if not (name_ok and email_ok) else "Looking for watch")
 
     def _on_archive_only_toggle(self):
         self._reflect_archive_only_state()
