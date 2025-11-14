@@ -140,37 +140,6 @@ def get_app_version() -> str:
         return default_version
 
 # ---------------------------------------------------------------------------
-# Configuration and paths
-# ---------------------------------------------------------------------------
-def load_config() -> dict:
-    """Load configuration from config.json, create with defaults if missing."""
-    config_file = Path(__file__).parent / "config.json"
-    default_config = {
-        "devmode": False,
-        "only_today": True
-    }
-    
-    try:
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                config = json.load(f)
-                # Ensure all required keys exist
-                for key, default_value in default_config.items():
-                    if key not in config:
-                        config[key] = default_value
-                return config
-        else:
-            # Create default config file
-            with open(config_file, 'w') as f:
-                json.dump(default_config, f, indent=2)
-            return default_config
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Warning: Could not load config.json, using defaults: {e}")
-        return default_config
-
-CONFIG = load_config()
-
-# ---------------------------------------------------------------------------
 # Paths and constants
 # ---------------------------------------------------------------------------
 DOCS = Path.home() / "Documents"
@@ -183,6 +152,7 @@ CONF     = BASE / "mailer.conf.json"
 TEMPLATE = BASE / "mail-template.txt"
 DEVICES_DIR = BASE / "devices"
 LABELS_CSV = BASE / "watch-labels.csv"       # device_id,label
+DEVMODE_FLAG = BASE / ".devmode"
 DETECT_TIMEOUT = 30                          # seconds to wait for mount
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -696,26 +666,20 @@ class Worker(threading.Thread):
                 self.post("ERROR|No file selected.")
                 return
         else:
-            # Email mode: filter files based on config setting
-            if CONFIG["only_today"]:
-                today_date = date.today()
-                todays_files = [f for f in files if datetime.fromtimestamp(f.stat().st_mtime).date() == today_date]
-                
-                if not todays_files:
-                    self.post("ERROR|No activity files from today were found on the watch.")
-                    return
-                
-                files_to_show = todays_files
-            else:
-                # Show all FIT files for selection
-                files_to_show = files
+            # Email mode: only consider files with today's modification date
+            today_date = date.today()
+            todays_files = [f for f in files if datetime.fromtimestamp(f.stat().st_mtime).date() == today_date]
+
+            if not todays_files:
+                self.post("ERROR|No activity files from today were found on the watch.")
+                return
 
             # Always show the file picker, pre-selecting the single file if it exists
-            if len(files_to_show) == 1:
+            if len(todays_files) == 1:
                 preselect_single = True
             else:
                 preselect_single = False
-            self.post("ASK_PICK|" + json.dumps([str(p) for p in files_to_show]) + f"|PRESELECT:{preselect_single}")
+            self.post("ASK_PICK|" + json.dumps([str(p) for p in todays_files]) + f"|PRESELECT:{preselect_single}")
             selected_paths = self._receive_pick_selection()
             if not selected_paths:
                 self.post("ERROR|No file was selected to email.")
