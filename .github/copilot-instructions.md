@@ -76,6 +76,11 @@ pyinstaller --noconfirm GarminMailer.spec && open dist/GarminMailer.app
 
 ## Configuration & Customization
 
+### Application Configuration
+- **Config file**: `config.json` in project root
+  - `devmode`: boolean - Shows/hides advanced UI controls (default: false)
+  - `only_today`: boolean - In email mode, filter to today's files only (default: true)
+
 ### Email Configuration
 - **Required file**: `~/Documents/GarminMailer/mailer.conf.json`
 - **Template**: Copy from `example.mailer.conf.json` (Brevo SMTP by default)
