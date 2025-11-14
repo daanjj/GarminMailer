@@ -502,7 +502,7 @@ class FileChoiceDialog(tk.Toplevel):
         
         tree.heading("filename", text="Filename")
         tree.heading("size", text="Size")
-        tree.column("filename", width=280, anchor="w")  # Wider for filename, left-aligned
+        tree.column("filename", width=200, anchor="w")  # ~25 characters wide, left-aligned
         tree.column("size", width=80, anchor="center")
 
         files_sorted = sorted(files, key=lambda p: p.stat().st_mtime)
