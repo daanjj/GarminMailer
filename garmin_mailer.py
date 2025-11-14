@@ -708,7 +708,8 @@ class Worker(threading.Thread):
                     mac_eject(root) if IS_MAC else win_eject_drive(root)
                 self.post("ERROR|No .fit files found on the watch.")
                 return
-            self.post("ASK_PICK|" + json.dumps([str(p) for p in files_sorted]))
+            # Archive mode never pre-selects files (always shows multiple files)
+            self.post("ASK_PICK|" + json.dumps([str(p) for p in files_sorted]) + "|PRESELECT:False")
             selected_paths = self._receive_pick_selection()
             if not selected_paths:
                 self.post("ERROR|No file selected.")
@@ -728,8 +729,11 @@ class Worker(threading.Thread):
                 # Show all FIT files for selection
                 files_to_show = files
 
-            # Always show the file picker, pre-selecting the single file if it exists
-            if len(files_to_show) == 1:
+            # Pre-select single file only in these specific conditions:
+            # 1. only_today is enabled (showing today's files only)
+            # 2. There's exactly one file to display
+            # Otherwise, let user choose from multiple files
+            if CONFIG["only_today"] and len(files_to_show) == 1:
                 preselect_single = True
             else:
                 preselect_single = False
