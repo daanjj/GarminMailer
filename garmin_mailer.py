@@ -1038,7 +1038,7 @@ class App(tk.Tk):
         email_ok = EMAIL_RE.match(self.email_var.get().strip()) is not None
         self.submit_btn.configure(state="normal" if (name_ok and email_ok and not self.running) else "disabled")
         if not self.running:
-            self.status_var.set("Waiting for name and email" if not (name_ok and email_ok) else "Looking for watch")
+            self.status_var.set("Waiting for name and email" if not (name_ok and email_ok) else "Click 'Ready' when Name and Recipient email have been provided")
 
     def _on_archive_only_toggle(self):
         self._reflect_archive_only_state()
