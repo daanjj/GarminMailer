@@ -922,30 +922,22 @@ class App(tk.Tk):
 
         # Set window icon on Windows
         if IS_WINDOWS:
-            # Try PNG first (more robust with iconphoto)
+            # 1. Try ICO for title bar (explicitly for this window)
+            try:
+                icon_path = _resource_path(os.path.join("icon", "icon.ico"))
+                if icon_path.exists():
+                    self.iconbitmap(str(icon_path))
+            except Exception:
+                pass
+
+            # 2. Try PNG for taskbar/others (more robust with iconphoto)
             try:
                 png_path = _resource_path(os.path.join("icon", "GarminMailer icon.png"))
-                log_line(f"DEBUG: Attempting to load PNG icon from: {png_path}")
                 if png_path.exists():
                     img = tk.PhotoImage(file=str(png_path))
                     self.iconphoto(True, img)
-                    log_line("DEBUG: PNG icon set successfully via iconphoto.")
-                else:
-                    log_line("DEBUG: PNG icon file NOT found.")
-            except Exception as e:
-                log_line(f"DEBUG: Failed to set PNG icon: {e}")
-
-            # Fallback to ICO if needed (or as additional measure)
-            try:
-                icon_path = _resource_path(os.path.join("icon", "icon.ico"))
-                log_line(f"DEBUG: Attempting to load ICO from: {icon_path}")
-                if icon_path.exists():
-                    self.iconbitmap(str(icon_path), default=True)
-                    log_line("DEBUG: ICO icon set successfully.")
-                else:
-                    log_line("DEBUG: ICO file NOT found.")
-            except Exception as e:
-                log_line(f"DEBUG: Failed to set ICO: {e}")
+            except Exception:
+                pass
 
         # Style
         style = ttk.Style()
