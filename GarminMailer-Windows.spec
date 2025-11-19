@@ -8,6 +8,12 @@ datas = []
 if os.path.exists('default-mail-template.txt'):
     datas.append(('default-mail-template.txt', '.'))
 
+if os.path.exists(os.path.join('icon', 'icon.ico')):
+    datas.append((os.path.join('icon', 'icon.ico'), 'icon'))
+
+if os.path.exists(os.path.join('icon', 'GarminMailer icon.png')):
+    datas.append((os.path.join('icon', 'GarminMailer icon.png'), 'icon'))
+
 a = Analysis(
     ['garmin_mailer.py'],
     pathex=[],
