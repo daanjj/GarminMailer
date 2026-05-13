@@ -78,7 +78,7 @@ To send emails, you must create a configuration file containing your SMTP server
 
 If you use Gmail, you cannot use your regular Google password. You must generate an **App Password**.
 
-1.  Go to your Google Account settings: myaccount.google.com.
+1.  Go to your Google Account settings: https://myaccount.google.com.
 2.  Navigate to **Security**.
 3.  Under "How you sign in to Google," ensure **2-Step Verification** is turned **On**.
 4.  Click on **App passwords**.
