@@ -44,14 +44,17 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, date
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fitparse import FitFile  # type: ignore
 
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 # Optional TLS trust improvements on some Python installs
 try:
-    from fitparse import FitFile
+    from fitparse import FitFile  # type: ignore
     FITPARSE_OK = True
 except ImportError:
     FITPARSE_OK = False
@@ -209,13 +212,6 @@ def log_line(msg: str) -> None:
     print(line)
     with LOGFILE.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
-
-# ---------------------------------------------------------------------------
-# PyInstaller resource helper
-# ---------------------------------------------------------------------------
-def _resource_path(rel: str) -> Path:
-    base = getattr(sys, "_MEIPASS", None)
-    return (Path(base) / rel) if base else (Path(__file__).resolve().parent / rel)
 
 # ---------------------------------------------------------------------------
 # First-run file creation
