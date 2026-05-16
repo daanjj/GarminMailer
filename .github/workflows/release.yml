@@ -16,9 +16,12 @@ on:
         default: false
         type: boolean
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,8 +65,7 @@ jobs:
     
   build-macos:
     runs-on: macos-latest
-    # Only build macOS when manually triggered AND user confirmed
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_macos == true }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.build_macos == true) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
