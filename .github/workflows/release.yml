@@ -55,6 +55,7 @@ jobs:
           copy dist/GarminMailer.exe GarminMailer-Windows/
           copy example.mailer.conf.json GarminMailer-Windows/
           copy MANUAL.md GarminMailer-Windows/
+          copy README.md GarminMailer-Windows/README.txt
           Compress-Archive -Path GarminMailer-Windows/* -DestinationPath GarminMailer-Windows.zip
 
       - name: Upload Windows Artifact
@@ -95,6 +96,7 @@ jobs:
           cp -r dist/GarminMailer.app GarminMailer-macOS/
           cp example.mailer.conf.json GarminMailer-macOS/
           cp MANUAL.md GarminMailer-macOS/
+          cp README.md GarminMailer-macOS/README.txt
           zip -r GarminMailer-macOS.zip GarminMailer-macOS
 
       - name: Upload macOS Artifact
